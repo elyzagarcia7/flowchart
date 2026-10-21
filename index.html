@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Business Process Flowcharts</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{box-sizing:border-box}
+body{margin:0;height:100vh;display:flex;flex-direction:column;font:14px system-ui,"Segoe UI",Arial,sans-serif;color:#0f172a;background:#f1f5f9}
+header{background:#fff;border-bottom:1px solid #e2e8f0;padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center}
+h1{margin:0;font-size:18px}
+nav{display:flex;flex-wrap:wrap;gap:6px}
+button{font:inherit;padding:6px 12px;border:1px solid #e2e8f0;background:#fff;border-radius:6px;cursor:pointer;color:#0f172a}
+button:hover{background:#eef2f7}nav button.on{background:#2563eb;color:#fff;border-color:#2563eb}
+#bar{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding:8px 16px;background:#fff;border-bottom:1px solid #e2e8f0}
+#title{font-weight:600;font-size:15px;margin-right:auto}
+main{flex:1;position:relative;overflow:hidden;background:#f8fafc;background-image:radial-gradient(#cbd5e1 1px,transparent 1px);background-size:20px 20px}
+#cv{width:100%;height:100%;display:block;touch-action:none;user-select:none;cursor:grab}
+#msg{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:20px;color:#64748b;pointer-events:none}
+#pa{display:none}
+@media print{body{display:block;height:auto}body>*:not(#pa){display:none!important}#pa{display:block}#pa svg{width:100%;height:auto;max-height:98vh}}
+</style></head><body>
+<header><h1>Business Process Flowcharts</h1><nav id="tabs"></nav></header>
+<div id="bar"><span id="title"></span>
+ <button onclick="zoomBy(1/1.2)">&minus;</button><span id="zl" style="min-width:42px;text-align:center">100%</span><button onclick="zoomBy(1.2)">+</button><button onclick="fitView()">Fit to screen</button>
+ <button onclick="expSVG()">Export SVG</button><button onclick="expPNG()">Export PNG</button><button onclick="doPrint()">Print</button></div>
+<main><svg id="cv" xmlns="http://www.w3.org/2000/svg"><g id="g"></g></svg><div id="msg"></div></main>
+<div id="pa"></div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+let S={nodes:[],edges:[]},view={x:0,y:0,k:1},list=[],curName='',drag=null;
+const G=id=>S.nodes.find(n=>n.id===id);
+const DEFS=p=>`<defs><marker id="${p}arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#475569"/></marker></defs>`;
+function nodeSVG(n){const {x,y,w,h}=n,cx=x+w/2,cy=y+h/2,st=`fill="${n.fill}" stroke="${n.stroke}" stroke-width="${n.sw}"${n.dash?` stroke-dasharray="${n.dash}"`:''}`;let s;
+ if(n.type==='decision')s=`<polygon points="${cx},${y} ${x+w},${cy} ${cx},${y+h} ${x},${cy}" ${st}/>`;
+ else if(n.type==='io')s=`<polygon points="${x+20},${y} ${x+w},${y} ${x+w-20},${y+h} ${x},${y+h}" ${st}/>`;
+ else s=`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${n.type==='process'?6:h/2}" ${st}/>`;
+ const L=n.text.split('\n');
+ return `<g>${s}${L.map((l,i)=>`<text x="${cx}" y="${cy+(i-(L.length-1)/2)*n.fs*1.25}" text-anchor="middle" dominant-baseline="central" font-family="Arial,Helvetica,sans-serif" font-size="${n.fs}" font-weight="${n.b?700:400}" fill="${n.tc}">${esc(l)||' '}</text>`).join('')}</g>`}
+function route(a,b){const ax=a.x+a.w/2,ay=a.y+a.h/2,bx=b.x+b.w/2,by=b.y+b.h/2,dx=bx-ax,dy=by-ay,ad=n=>n.type==='io'?10:0;
+ if(Math.abs(dy)>.6*Math.abs(dx)){const s=dy>=0?1:-1,p1=[ax,ay+s*a.h/2],p2=[bx,by-s*b.h/2],m=(p1[1]+p2[1])/2;return{p:[p1,[ax,m],[bx,m],p2],v:1,s}}
+ const s=dx>=0?1:-1,p1=[ax+s*(a.w/2-ad(a)),ay],p2=[bx-s*(b.w/2-ad(b)),by],m=(p1[0]+p2[0])/2;return{p:[p1,[m,ay],[m,by],p2],v:0,s}}
+function edgeSVG(e,p){const a=G(e.from),b=G(e.to);if(!a||!b)return'';const r=route(a,b),d='M'+r.p.map(q=>q.join(' ')).join('L');let lb='';
+ if(e.label){const lx=r.v?r.p[0][0]:r.p[0][0]+r.s*30,ly=r.v?r.p[0][1]+r.s*18:r.p[0][1],w=e.label.length*7.5+12;
+  lb=`<rect x="${lx-w/2}" y="${ly-10}" width="${w}" height="20" rx="4" fill="#fff" opacity=".92"/><text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" font-family="Arial,sans-serif" font-size="13" font-weight="600" fill="#475569">${esc(e.label)}</text>`}
+ return `<g><path d="${d}" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#${p}arr)"/>${lb}</g>`}
+function bounds(){if(!S.nodes.length)return{x:0,y:0,w:100,h:100};const x0=Math.min(...S.nodes.map(n=>n.x)),y0=Math.min(...S.nodes.map(n=>n.y)),x1=Math.max(...S.nodes.map(n=>n.x+n.w)),y1=Math.max(...S.nodes.map(n=>n.y+n.h));return{x:x0,y:y0,w:x1-x0,h:y1-y0}}
+function render(){$('#g').innerHTML=DEFS('')+S.edges.map(e=>edgeSVG(e,'')).join('')+S.nodes.map(nodeSVG).join('');
+ $('#g').setAttribute('transform',`translate(${view.x} ${view.y}) scale(${view.k})`);$('#zl').textContent=Math.round(view.k*100)+'%'}
+function zoomBy(f,cx,cy){const c=$('#cv');cx=cx??c.clientWidth/2;cy=cy??c.clientHeight/2;const k=Math.min(3,Math.max(.2,view.k*f));view.x=cx-(cx-view.x)*k/view.k;view.y=cy-(cy-view.y)*k/view.k;view.k=k;render()}
+function fitView(){const c=$('#cv'),b=bounds(),k=Math.min(1.5,(c.clientWidth-80)/b.w,(c.clientHeight-80)/b.h);view.k=Math.max(.2,k);view.x=(c.clientWidth-b.w*view.k)/2-b.x*view.k;view.y=(c.clientHeight-b.h*view.k)/2-b.y*view.k;render()}
+const cv=$('#cv');
+cv.addEventListener('pointerdown',e=>{drag={sx:e.clientX,sy:e.clientY,vx:view.x,vy:view.y}});
+window.addEventListener('pointermove',e=>{if(drag){view.x=drag.vx+e.clientX-drag.sx;view.y=drag.vy+e.clientY-drag.sy;render()}});
+window.addEventListener('pointerup',()=>drag=null);
+cv.addEventListener('wheel',e=>{e.preventDefault();const r=cv.getBoundingClientRect();zoomBy(e.deltaY<0?1.1:1/1.1,e.clientX-r.left,e.clientY-r.top)},{passive:false});
+window.addEventListener('resize',fitView);
+const msg=t=>{$('#msg').textContent=t||'';$('#msg').style.display=t?'flex':'none'};
+async function jf(u){const r=await fetch(u+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw Error(r.status);return r.json()}
+async function openChart(id){const m=list.find(x=>x.id===id)||list[0];if(!m)return;history.replaceState(null,'','#'+m.id);curName=m.name;$('#title').textContent=m.name;
+ document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.id===m.id));
+ try{const d=await jf('charts/'+m.file);S={nodes:d.nodes||[],edges:d.edges||[]};msg(S.nodes.length?'':'This chart has no steps yet.')}catch(e){S={nodes:[],edges:[]};msg('This chart has not been published yet.')}fitView()}
+async function init(){try{list=await jf('charts/index.json')}catch(e){return msg('The charts could not be loaded. Please open this page from its website address rather than from a file on your computer.')}
+ $('#tabs').innerHTML=list.map(m=>`<button data-id="${esc(m.id)}" onclick="openChart('${esc(m.id)}')">${esc(m.name)}</button>`).join('');openChart(location.hash.slice(1))}
+function svgString(p='x'){const b=bounds(),pad=30,W=b.w+2*pad,H=b.h+2*pad,X=b.x-pad,Y=b.y-pad;
+ return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="${X} ${Y} ${W} ${H}">${DEFS(p)}<rect x="${X}" y="${Y}" width="${W}" height="${H}" fill="#fff"/>${S.edges.map(e=>edgeSVG(e,p)).join('')}${S.nodes.map(nodeSVG).join('')}</svg>`}
+const fn=ext=>(curName.replace(/[^\w]+/g,'-').replace(/^-|-$/g,'').toLowerCase()||'flowchart')+ext;
+function download(name,data,type){const a=document.createElement('a');a.href=URL.createObjectURL(data instanceof Blob?data:new Blob([data],{type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}
+const need=()=>S.nodes.length?true:(alert('This chart is empty.'),false);
+function expSVG(){if(need())download(fn('.svg'),svgString(),'image/svg+xml')}
+function expPNG(){if(!need())return;const b=bounds(),W=b.w+60,H=b.h+60,sc=Math.min(2,8000/Math.max(W,H)),img=new Image();
+ img.onload=()=>{const c=document.createElement('canvas');c.width=Math.round(W*sc);c.height=Math.round(H*sc);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);c.toBlob(bl=>download(fn('.png'),bl),'image/png')};
+ img.onerror=()=>alert('PNG export failed in this browser. Try Export SVG instead.');img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svgString())}
+function doPrint(){if(!need())return;$('#pa').innerHTML=svgString();window.print()}
+init();
+</script></body></html>

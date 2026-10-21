@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Flowchart Editor (private)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bd:#e2e8f0;--tx:#0f172a;--mut:#64748b;--ac:#2563eb}
+*{box-sizing:border-box}
+body{margin:0;height:100vh;font:14px system-ui,"Segoe UI",Arial,sans-serif;color:var(--tx);background:#f1f5f9;display:grid;grid-template-rows:auto 1fr;grid-template-columns:200px 1fr 280px;grid-template-areas:"top top top" "lib cv pr";overflow:hidden}
+button,select,input,textarea{font:inherit}
+button{padding:6px 10px;border:1px solid var(--bd);background:#fff;border-radius:6px;cursor:pointer;color:var(--tx)}
+button:hover{background:#eef2f7}button.pri{background:var(--ac);color:#fff;border-color:var(--ac)}button.pri:hover{background:#1d4ed8}
+button.on{background:#dbeafe;border-color:var(--ac)}button.dng{color:#b91c1c}
+#top{grid-area:top;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding:8px 12px;background:#fff;border-bottom:1px solid var(--bd)}
+.grp{display:flex;gap:4px;align-items:center;padding-right:10px;border-right:1px solid var(--bd)}
+.grp:last-child{border:0}.brand{font-weight:700;font-size:16px;margin-right:6px}
+#lib,#pr{background:#fff;padding:12px;overflow:auto}#lib{grid-area:lib;border-right:1px solid var(--bd)}#pr{grid-area:pr;border-left:1px solid var(--bd)}
+h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
+.shp{display:flex;align-items:center;gap:8px;width:100%;margin-bottom:6px;text-align:left;cursor:grab}
+.mut{color:var(--mut);font-size:12px;line-height:1.5}
+#cvw{grid-area:cv;position:relative;overflow:hidden;background:#f8fafc;background-image:radial-gradient(#cbd5e1 1px,transparent 1px);background-size:20px 20px}
+#cv{width:100%;height:100%;display:block;touch-action:none;user-select:none}
+#hint{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;color:var(--mut);text-align:center;gap:10px}
+#hint button{pointer-events:auto}
+.f{display:block;margin-bottom:8px;flex:1}.f span{display:block;font-size:12px;color:var(--mut);margin-bottom:2px}
+.f input,.f select,.f textarea{width:100%;padding:5px 6px;border:1px solid var(--bd);border-radius:6px}.f input[type=color]{padding:0;height:30px}
+.row{display:flex;gap:8px}.btns{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}
+.cn{display:flex;gap:4px;align-items:center;margin-bottom:4px;font-size:12px}.cn input{width:60px;padding:3px}
+#modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:9;align-items:center;justify-content:center}
+#modal .box{background:#fff;border-radius:10px;padding:18px;width:min(640px,94vw)}#modal textarea{width:100%;font:13px Consolas,monospace;border:1px solid var(--bd);border-radius:6px;padding:8px}
+#pa{display:none}
+@media print{body{display:block;overflow:visible;height:auto}body>*:not(#pa){display:none!important}#pa{display:block}#pa svg{width:100%;height:auto;max-height:98vh}}
+</style></head><body>
+<div id="top">
+ <div class="grp"><span class="brand">&#9707; Flowchart Editor</span></div>
+ <div class="grp"><label><b>Chart</b> <select id="proj" onchange="switchProj(this.value)"></select></label><button onclick="addProj()">+ New chart</button><button onclick="renameProj()">Rename</button><button class="dng" onclick="delProj()">Delete chart</button></div>
+ <div class="grp"><button onclick="newDoc()">Clear chart</button><button onclick="$('#file').click()">Open project</button><button onclick="saveJSON()">Save project (.json)</button><input id="file" type="file" accept=".json,application/json" hidden onchange="openJSON(this)"></div>
+ <div class="grp"><button onclick="expSVG()">Export SVG</button><button onclick="expPNG()">Export PNG</button><button onclick="doPrint()">Print</button></div>
+ <div class="grp"><button onclick="undo()">&#8630; Undo</button><button onclick="redo()">Redo &#8631;</button></div>
+ <div class="grp"><button onclick="zoomBy(1/1.2)">&minus;</button><span id="zl" style="min-width:42px;text-align:center">100%</span><button onclick="zoomBy(1.2)">+</button><button onclick="fitView()">Fit</button></div>
+ <div class="grp"><label>Flow <select id="dir" onchange="S.dir=this.value;commit()"><option value="TB">Top to bottom</option><option value="LR">Left to right</option></select></label><button onclick="autoLayout()">Auto-layout</button></div>
+ <div class="grp"><button id="bconn" onclick="toggleConn()">Connect mode</button><button class="pri" onclick="openImport()">Import Mermaid / list</button></div>
+ <div class="grp"><button class="pri" onclick="publish()">Publish to site</button><button onclick="loadSite(true)">Reload from site</button><button onclick="ghSettings()">Publish settings</button></div>
+ <div class="grp"><span id="st" class="mut"></span></div>
+</div>
+<div id="lib"><h3>Shapes</h3><div id="shapes"></div>
+ <label class="mut"><input type="checkbox" id="auto" checked> Add new shapes after the selected one and connect them</label>
+ <h3 style="margin-top:16px">Selected connector</h3>
+ <div class="btns"><button onclick="lblSel('Yes')">Label: Yes</button><button onclick="lblSel('No')">Label: No</button></div>
+ <p class="mut">Click a shape to add it, or drag it onto the page. Click an arrow, then use these buttons to label it.</p></div>
+<div id="cvw"><svg id="cv" xmlns="http://www.w3.org/2000/svg"><g id="g"></g></svg>
+ <div id="hint"><div style="font-size:18px;font-weight:600;color:#334155">Your page is empty</div><div>Click a shape on the left to begin, or</div><button class="pri" onclick="$('#mm').value=EXM;setMode('mermaid');loadEx()">Load an example flowchart</button></div></div>
+<div id="pr"></div>
+<div id="modal"><div class="box"><h3>Create a flowchart from text</h3>
+ <div class="btns"><button id="tm" class="on" onclick="setMode('mermaid')">Mermaid code</button><button id="tl" onclick="setMode('list')">Numbered list</button></div>
+ <p id="mhelp" class="mut"></p><textarea id="mm" rows="13" spellcheck="false"></textarea>
+ <div class="btns" style="margin-top:10px"><button onclick="fillEx()">Insert example</button><button class="pri" onclick="doImport()">Convert to editable flowchart</button><button onclick="$('#modal').style.display='none'">Cancel</button></div></div></div>
+<div id="pa"></div>
+<script>
+const $=s=>document.querySelector(s);
+const DEF={start:{fill:'#dcfce7',stroke:'#16a34a',w:140,h:56,t:'Start',n:'Start'},end:{fill:'#fee2e2',stroke:'#dc2626',w:140,h:56,t:'End',n:'End'},process:{fill:'#dbeafe',stroke:'#2563eb',w:150,h:64,t:'Process',n:'Process'},decision:{fill:'#fef9c3',stroke:'#ca8a04',w:170,h:100,t:'Decision?',n:'Decision'},io:{fill:'#ede9fe',stroke:'#7c3aed',w:170,h:64,t:'Input / Output',n:'Input / Output'}};
+const KEY2='flowchart-maker-v2';let P={cur:'',projects:{}};
+let S={nodes:[],edges:[],dir:'TB'},sel=null,selE=null,hist=[],hi=-1,view={x:60,y:40,k:1},uid=0,tool='select',connSrc=null,drag=null,tmp='',mode='mermaid';
+const G=id=>S.nodes.find(n=>n.id===id),snap=v=>Math.round(v/10)*10;
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const maxId=()=>Math.max(0,...S.nodes.concat(S.edges).map(x=>+String(x.id).slice(1)||0));
+function grow(n){const L=n.text.split('\n'),tw=Math.max(...L.map(s=>s.length))*n.fs*(n.b?.64:.6),th=L.length*n.fs*1.3,d=n.type==='decision';
+ n.w=Math.max(n.w,Math.ceil((tw*(d?1.8:1)+(d?20:40))/10)*10);n.h=Math.max(n.h,Math.ceil((th*(d?2:1)+(d?20:24))/10)*10)}
+function mk(type,x,y,text){const d=DEF[type],n={id:'n'+(++uid),type,x:snap(x),y:snap(y),w:d.w,h:d.h,text:text??d.t,fill:d.fill,stroke:d.stroke,sw:2,dash:'',tc:'#111827',fs:14,b:0};grow(n);return n}
+function addEdge(a,b,label){if(a===b||S.edges.some(e=>e.from===a&&e.to===b))return null;
+ if(label===undefined){label='';if(G(a).type==='decision'){const c=S.edges.filter(e=>e.from===a).length;label=c===0?'Yes':c===1?'No':''}}
+ const e={id:'e'+(++uid),from:a,to:b,label};S.edges.push(e);return e}
+/* ---------- history / storage ---------- */
+function commit(){const j=JSON.stringify(S);if(hist[hi]===j)return;hist.length=hi+1;hist.push(j);if(hist.length>150)hist.shift();hi=hist.length-1;P.projects[P.cur].data=S;
+ try{localStorage.setItem(KEY2,JSON.stringify(P));$('#st').textContent='Autosaved '+new Date().toLocaleTimeString()}catch(e){$('#st').textContent='Browser storage unavailable'}}
+function restore(){S=JSON.parse(hist[hi]);P.projects[P.cur].data=S;try{localStorage.setItem(KEY2,JSON.stringify(P))}catch(e){}if(sel&&!G(sel))sel=null;if(selE&&!S.edges.some(e=>e.id===selE))selE=null;syncUI();render();renderPanel()}
+function undo(){if(hi>0){hi--;restore()}}function redo(){if(hi<hist.length-1){hi++;restore()}}
+function syncUI(){$('#dir').value=S.dir}
+function done(){commit();renderPanel()}
+/* ---------- drawing ---------- */
+const DEFS=p=>`<defs><marker id="${p}arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#475569"/></marker><marker id="${p}arrS" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#2563eb"/></marker></defs>`;
+function nodeSVG(n){const {x,y,w,h}=n,cx=x+w/2,cy=y+h/2,st=`fill="${n.fill}" stroke="${n.stroke}" stroke-width="${n.sw}"${n.dash?` stroke-dasharray="${n.dash}"`:''}`;let s;
+ if(n.type==='decision')s=`<polygon points="${cx},${y} ${x+w},${cy} ${cx},${y+h} ${x},${cy}" ${st}/>`;
+ else if(n.type==='io')s=`<polygon points="${x+20},${y} ${x+w},${y} ${x+w-20},${y+h} ${x},${y+h}" ${st}/>`;
+ else s=`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${n.type==='process'?6:h/2}" ${st}/>`;
+ const L=n.text.split('\n'),t=L.map((l,i)=>`<text x="${cx}" y="${cy+(i-(L.length-1)/2)*n.fs*1.25}" text-anchor="middle" dominant-baseline="central" font-family="Arial,Helvetica,sans-serif" font-size="${n.fs}" font-weight="${n.b?700:400}" fill="${n.tc}">${esc(l)||' '}</text>`).join('');
+ return `<g data-n="${n.id}"${connSrc===n.id?' opacity=".55"':''}>${s}${t}</g>`}
+function route(a,b){const ax=a.x+a.w/2,ay=a.y+a.h/2,bx=b.x+b.w/2,by=b.y+b.h/2,dx=bx-ax,dy=by-ay,ad=n=>n.type==='io'?10:0;
+ if(Math.abs(dy)>.6*Math.abs(dx)){const s=dy>=0?1:-1,p1=[ax,ay+s*a.h/2],p2=[bx,by-s*b.h/2],m=(p1[1]+p2[1])/2;return{p:[p1,[ax,m],[bx,m],p2],v:1,s}}
+ const s=dx>=0?1:-1,p1=[ax+s*(a.w/2-ad(a)),ay],p2=[bx-s*(b.w/2-ad(b)),by],m=(p1[0]+p2[0])/2;return{p:[p1,[m,ay],[m,by],p2],v:0,s}}
+function edgeSVG(e,sl,p=''){const a=G(e.from),b=G(e.to);if(!a||!b)return'';const r=route(a,b),d='M'+r.p.map(q=>q.join(' ')).join('L'),c=sl?'#2563eb':'#475569';
+ let lb='';if(e.label){const lx=r.v?r.p[0][0]:r.p[0][0]+r.s*30,ly=r.v?r.p[0][1]+r.s*18:r.p[0][1],w=e.label.length*7.5+12;
+  lb=`<rect x="${lx-w/2}" y="${ly-10}" width="${w}" height="20" rx="4" fill="#fff" opacity=".92"/><text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" font-family="Arial,sans-serif" font-size="13" font-weight="600" fill="${c}">${esc(e.label)}</text>`}
+ return `<g data-e="${e.id}"><path d="${d}" fill="none" stroke="transparent" stroke-width="14"/><path d="${d}" fill="none" stroke="${c}" stroke-width="${sl?3:2}" marker-end="url(#${p}${sl?'arrS':'arr'})"/>${lb}</g>`}
+function selSVG(n){const {x,y,w,h}=n,hs=[[x+w/2,y],[x+w,y+h/2],[x+w/2,y+h],[x,y+h/2]];
+ return `<rect x="${x-6}" y="${y-6}" width="${w+12}" height="${h+12}" fill="none" stroke="#2563eb" stroke-dasharray="5 4" pointer-events="none"/>`+hs.map(q=>`<circle data-h="${n.id}" cx="${q[0]}" cy="${q[1]}" r="6" fill="#fff" stroke="#2563eb" stroke-width="2" style="cursor:crosshair"/>`).join('')}
+function render(){let h=DEFS('')+S.edges.map(e=>edgeSVG(e,e.id===selE)).join('')+S.nodes.map(nodeSVG).join('');
+ if(sel&&G(sel)&&tool==='select')h+=selSVG(G(sel));h+=tmp;
+ $('#g').innerHTML=h;$('#g').setAttribute('transform',`translate(${view.x} ${view.y}) scale(${view.k})`);
+ $('#hint').style.display=S.nodes.length?'none':'flex';$('#zl').textContent=Math.round(view.k*100)+'%'}
+function bounds(){if(!S.nodes.length)return{x:0,y:0,w:100,h:100};const x0=Math.min(...S.nodes.map(n=>n.x)),y0=Math.min(...S.nodes.map(n=>n.y)),x1=Math.max(...S.nodes.map(n=>n.x+n.w)),y1=Math.max(...S.nodes.map(n=>n.y+n.h));return{x:x0,y:y0,w:x1-x0,h:y1-y0}}
+/* ---------- view ---------- */
+function zoomBy(f,cx,cy){const c=$('#cv');cx=cx??c.clientWidth/2;cy=cy??c.clientHeight/2;const k=Math.min(3,Math.max(.2,view.k*f));view.x=cx-(cx-view.x)*k/view.k;view.y=cy-(cy-view.y)*k/view.k;view.k=k;render()}
+function fitView(){const c=$('#cv'),b=bounds(),k=Math.min(1.5,(c.clientWidth-80)/b.w,(c.clientHeight-80)/b.h);view.k=Math.max(.2,k);view.x=(c.clientWidth-b.w*view.k)/2-b.x*view.k;view.y=(c.clientHeight-b.h*view.k)/2-b.y*view.k;render()}
+const wpt=e=>{const r=$('#cv').getBoundingClientRect();return{x:(e.clientX-r.left-view.x)/view.k,y:(e.clientY-r.top-view.y)/view.k}};
+/* ---------- selection & editing ---------- */
+function select(id){sel=id;selE=null;renderPanel();render()}
+function selectEdge(id){sel=null;selE=id;renderPanel();render()}
+function toggleConn(){tool=tool==='connect'?'select':'connect';connSrc=null;$('#bconn').classList.toggle('on',tool==='connect');$('#bconn').textContent=tool==='connect'?'Connect mode: click 2 shapes':'Connect mode';render()}
+const cv=$('#cv');
+cv.addEventListener('pointerdown',e=>{const t=e.target,hd=t.closest('[data-h]'),nd=t.closest('[data-n]'),ed=t.closest('[data-e]'),p=wpt(e);
+ if(hd){drag={k:'conn',id:hd.dataset.h};return}
+ if(nd){const id=nd.dataset.n,n=G(id);
+  if(tool==='connect'){if(!connSrc){connSrc=id;select(id)}else{addEdge(connSrc,id);connSrc=null;commit();select(id)}return}
+  select(id);drag={k:'move',id,ox:p.x-n.x,oy:p.y-n.y,moved:false};return}
+ if(ed){selectEdge(ed.dataset.e);return}
+ connSrc=null;select(null);drag={k:'pan',sx:e.clientX,sy:e.clientY,vx:view.x,vy:view.y}});
+window.addEventListener('pointermove',e=>{if(!drag)return;const p=wpt(e);
+ if(drag.k==='move'){const n=G(drag.id);n.x=snap(p.x-drag.ox);n.y=snap(p.y-drag.oy);drag.moved=true;render()}
+ else if(drag.k==='pan'){view.x=drag.vx+e.clientX-drag.sx;view.y=drag.vy+e.clientY-drag.sy;render()}
+ else if(drag.k==='conn'){const n=G(drag.id);tmp=`<line x1="${n.x+n.w/2}" y1="${n.y+n.h/2}" x2="${p.x}" y2="${p.y}" stroke="#2563eb" stroke-width="2" stroke-dasharray="6 4" pointer-events="none"/>`;render()}});
+window.addEventListener('pointerup',e=>{if(!drag)return;
+ if(drag.k==='move'&&drag.moved)commit();
+ if(drag.k==='conn'){const t=document.elementFromPoint(e.clientX,e.clientY),nd=t&&t.closest&&t.closest('[data-n]');if(nd&&nd.dataset.n!==drag.id){const ne=addEdge(drag.id,nd.dataset.n);if(ne){commit();tmp='';drag=null;renderPanel()}}}
+ tmp='';drag=null;render()});
+cv.addEventListener('dblclick',e=>{const nd=e.target.closest('[data-n]');if(nd){select(nd.dataset.n);const t=$('#ptext');if(t){t.focus();t.select()}}});
+cv.addEventListener('wheel',e=>{e.preventDefault();if(e.ctrlKey||e.metaKey){const r=cv.getBoundingClientRect();zoomBy(e.deltaY<0?1.1:1/1.1,e.clientX-r.left,e.clientY-r.top)}else{view.x-=e.deltaX;view.y-=e.deltaY;render()}},{passive:false});
+cv.addEventListener('dragover',e=>e.preventDefault());
+cv.addEventListener('drop',e=>{e.preventDefault();const t=e.dataTransfer.getData('text/plain');if(DEF[t]){const p=wpt(e);addAt(t,p.x,p.y)}});
+document.addEventListener('keydown',e=>{const tg=e.target.tagName;if(/INPUT|TEXTAREA|SELECT/.test(tg))return;const c=e.ctrlKey||e.metaKey,k=e.key.toLowerCase();
+ if(k==='delete'||k==='backspace'){e.preventDefault();del()}
+ else if(c&&k==='z'){e.preventDefault();e.shiftKey?redo():undo()}else if(c&&k==='y'){e.preventDefault();redo()}
+ else if(c&&k==='d'){e.preventDefault();dup()}
+ else if(k==='escape'){if(tool==='connect')toggleConn();select(null)}});
+/* ---------- shape operations ---------- */
+function free(n,down){for(let i=0;i<60&&S.nodes.some(m=>n.x<m.x+m.w+20&&n.x+n.w+20>m.x&&n.y<m.y+m.h+20&&n.y+n.h+20>m.y);i++){if(down)n.x+=n.w+40;else n.y+=n.h+40}}
+function addAt(type,cx,cy){const n=mk(type,0,0);n.x=snap(cx-n.w/2);n.y=snap(cy-n.h/2);free(n,true);S.nodes.push(n);commit();select(n.id)}
+function addShape(type){if(sel&&G(sel)&&$('#auto').checked)return addNext(sel,type);const c=$('#cv');addAt(type,(c.clientWidth/2-view.x)/view.k,(c.clientHeight/2-view.y)/view.k)}
+function addNext(id,type,label,alt){const s=G(id),n=mk(type,0,0),down=((S.dir==='TB')===!alt);
+ n.x=snap(down?s.x+(s.w-n.w)/2:s.x+s.w+70);n.y=snap(down?s.y+s.h+70:s.y+(s.h-n.h)/2);
+ if(!down&&S.dir==='LR'){n.x=snap(s.x+s.w+90)}
+ free(n,down);S.nodes.push(n);addEdge(s.id,n.id,label);commit();select(n.id)}
+function dup(){const n=G(sel);if(!n)return;const c={...n,id:'n'+(++uid),x:n.x+30,y:n.y+30};S.nodes.push(c);commit();select(c.id)}
+function del(){if(selE){S.edges=S.edges.filter(e=>e.id!==selE);selE=null}else if(sel){S.nodes=S.nodes.filter(n=>n.id!==sel);S.edges=S.edges.filter(e=>e.from!==sel&&e.to!==sel);sel=null}else return;commit();renderPanel();render()}
+function setN(p,v){const n=G(sel);if(!n)return;n[p]=v;if(p==='text'||p==='fs'||p==='b')grow(n);render()}
+function setE(id,v){const e=S.edges.find(x=>x.id===id);if(e){e.label=v;render()}}
+function delE(id){S.edges=S.edges.filter(e=>e.id!==id);commit();renderPanel();render()}
+function lblSel(v){if(!selE)return alert('Click an arrow first, then choose a label.');setE(selE,v);done()}
+function revE(id){const e=S.edges.find(x=>x.id===id);[e.from,e.to]=[e.to,e.from];commit();render()}
+/* ---------- panel ---------- */
+const short=s=>{s=s.replace(/\n/g,' ');return s.length>16?s.slice(0,15)+'…':s};
+function renderPanel(){const P=$('#pr'),n=G(sel),e=S.edges.find(x=>x.id===selE);
+ if(n){const col=(l,p)=>`<label class="f"><span>${l}</span><input type="color" value="${n[p]}" oninput="setN('${p}',this.value)" onchange="done()"></label>`,
+  num=(l,p,a,b)=>`<label class="f"><span>${l}</span><input type="number" min="${a}" max="${b}" value="${n[p]}" oninput="setN('${p}',Math.max(${a},+this.value||${a}))" onchange="done()"></label>`,
+  opt=(v,l)=>`<option value="${v}"${n.dash===v?' selected':''}>${l}</option>`;
+  const outs=S.edges.filter(x=>x.from===n.id).map(x=>`<div class="cn">&rarr; ${esc(short(G(x.to).text))} <input placeholder="label" value="${esc(x.label||'')}" oninput="setE('${x.id}',this.value)" onchange="done()"><button class="dng" title="Remove this connector" onclick="delE('${x.id}')">&times;</button></div>`).join('');
+  P.innerHTML=`<h3>${DEF[n.type].n}</h3>
+  <label class="f"><span>Text (double-click a shape to jump here)</span><textarea id="ptext" rows="3" oninput="setN('text',this.value)" onchange="done()">${esc(n.text)}</textarea></label>
+  <div class="row">${col('Fill','fill')}${col('Border','stroke')}${col('Text','tc')}</div>
+  <div class="row">${num('Border width','sw',0,10)}${num('Font size','fs',8,48)}</div>
+  <div class="row"><label class="f"><span>Border style</span><select oninput="setN('dash',this.value)" onchange="done()">${opt('','Solid')}${opt('8 5','Dashed')}${opt('2 4','Dotted')}</select></label>
+  <label class="f"><span>Weight</span><label><input type="checkbox" style="width:auto" ${n.b?'checked':''} onchange="setN('b',this.checked?1:0);done()"> Bold</label></label></div>
+  <div class="row">${num('Width','w',40,600)}${num('Height','h',30,400)}</div>
+  <div class="btns"><button onclick="dup()">Duplicate</button><button class="dng" onclick="del()">Delete</button></div>
+  <h3>Add next step</h3><div class="btns"><button onclick="addNext(sel,'process')">Process</button><button onclick="addNext(sel,'decision')">Decision</button><button onclick="addNext(sel,'io')">Input/Output</button><button onclick="addNext(sel,'end')">End</button></div>
+  ${n.type==='decision'?`<h3>Decision branches</h3><div class="btns"><button onclick="addNext(sel,'process','Yes',false)">+ Yes branch</button><button onclick="addNext(sel,'process','No',true)">+ No branch</button></div>`:''}
+  <h3>Outgoing connectors</h3>${outs||'<p class="mut">None yet. Drag a blue dot onto another shape.</p>'}`}
+ else if(e){P.innerHTML=`<h3>Connector</h3><label class="f"><span>Label</span><input value="${esc(e.label||'')}" oninput="setE('${e.id}',this.value)" onchange="done()"></label>
+  <div class="btns"><button onclick="setE('${e.id}','Yes');done()">Yes</button><button onclick="setE('${e.id}','No');done()">No</button><button onclick="setE('${e.id}','');done()">Clear</button></div>
+  <div class="btns"><button onclick="revE('${e.id}')">Reverse direction</button><button class="dng" onclick="del()">Delete connector</button></div>`}
+ else P.innerHTML=`<h3>Quick start</h3><ol class="mut" style="padding-left:18px;margin:0 0 10px"><li>Click a shape in the left library, or drag it onto the page.</li><li>With a shape selected, the next shape you add is placed <b>after it and connected automatically</b>.</li><li>Select a shape and drag one of its <b>blue dots</b> onto another shape to draw an arrow.</li><li>Double-click a shape to edit its text. Use the panel to change colours, border and font.</li><li>For a Decision, use <b>+ Yes branch</b> / <b>+ No branch</b>.</li><li><b>Auto-layout</b> tidies everything top-to-bottom or left-to-right.</li><li><b>Import Mermaid / list</b> turns Claude-generated code or a numbered list into shapes.</li></ol>
+  <p class="mut"><b>Keys:</b> Delete removes the selection, Ctrl+Z / Ctrl+Y undo/redo, Ctrl+D duplicates, Ctrl+scroll zooms, drag the background to pan. Your work autosaves in this browser.</p>`}
+/* ---------- auto layout ---------- */
+function layout(N,E,dir){if(!N.length)return;const id={};N.forEach((n,i)=>id[n.id]=i);
+ const ed=E.filter(e=>id[e.from]!=null&&id[e.to]!=null&&e.from!==e.to).map(e=>[id[e.from],id[e.to]]),hasIn=N.map(()=>false);ed.forEach(x=>hasIn[x[1]]=true);
+ const st=N.map(()=>0),fw=[],dfs=u=>{st[u]=1;for(const [a,b] of ed){if(a!==u||st[b]===1)continue;fw.push([a,b]);if(st[b]===0)dfs(b)}st[u]=2};
+ N.forEach((_,i)=>{if(!hasIn[i]&&!st[i])dfs(i)});N.forEach((_,i)=>{if(!st[i])dfs(i)});
+ const L=N.map(()=>0);for(let k=0;k<N.length;k++){let c=false;for(const [a,b] of fw)if(L[b]<L[a]+1){L[b]=L[a]+1;c=true}if(!c)break}
+ const nl=Math.max(...L)+1,rows=Array.from({length:nl},()=>[]);N.forEach((_,i)=>rows[L[i]].push(i));
+ const pos=N.map(()=>0),setp=()=>rows.forEach(r=>r.forEach((v,i)=>pos[v]=i));setp();
+ const par=v=>fw.filter(e=>e[1]===v).map(e=>e[0]),chd=v=>fw.filter(e=>e[0]===v).map(e=>e[1]);
+ const bary=(r,nb)=>{const m={};r.forEach(v=>{const q=nb(v);m[v]=q.length?q.reduce((s,x)=>s+pos[x],0)/q.length:pos[v]});r.sort((a,b)=>m[a]-m[b]||pos[a]-pos[b])};
+ for(let it=0;it<4;it++){for(let i=1;i<nl;i++){bary(rows[i],par);setp()}for(let i=nl-2;i>=0;i--){bary(rows[i],chd);setp()}}
+ const T=dir==='TB',gf=T?70:90,gb=T?50:40,fs=n=>T?n.h:n.w,bs=n=>T?n.w:n.h;let f=0;
+ rows.forEach(r=>{const mx=Math.max(...r.map(v=>fs(N[v]))),tot=r.reduce((s,v)=>s+bs(N[v]),0)+gb*(r.length-1);let b=-tot/2;
+  r.forEach(v=>{const n=N[v],fc=f+(mx-fs(n))/2;if(T){n.x=b;n.y=fc}else{n.x=fc;n.y=b}b+=bs(n)+gb});f+=mx+gf});
+ const mx=Math.min(...N.map(n=>n.x)),my=Math.min(...N.map(n=>n.y));N.forEach(n=>{n.x=snap(n.x-mx+60);n.y=snap(n.y-my+40)})}
+function autoLayout(){if(!S.nodes.length)return alert('Add some shapes first.');layout(S.nodes,S.edges,S.dir);commit();fitView()}
+/* ---------- import: Mermaid + numbered list ---------- */
+const EXM=`flowchart TD
+  A([Start]) --> B[/Enter order/]
+  B --> C{Item in stock?}
+  C -->|Yes| D[Pack the order]
+  C -->|No| E[Notify customer]
+  D --> F[Ship order]
+  E --> G([End])
+  F --> G`;
+const EXL=`1. Enter customer details
+2. Is the customer registered?
+3. Create the account
+4. Confirm the order
+5. Print the receipt`;
+const NR=/^\s*(\w+)(?:\s*(\(\[|\(\(|\[\[|\[\/|\[\\|\[|\(|\{\{|\{|>)\s*("[^"]*"|[\s\S]*?)\s*(\]\)|\)\)|\]\]|\/\]|\\\]|\]|\)|\}\}|\}))?/;
+function wrap(t,m=22){if(t.includes('\n'))return t;const out=[];let c='';t.split(/\s+/).forEach(w=>{if(c&&(c+' '+w).length>m){out.push(c);c=w}else c=c?c+' '+w:w});if(c)out.push(c);return out.join('\n')}
+function pNode(s){const m=s.match(NR);if(!m)return null;let type='process',text=m[1];
+ if(m[2]){text=m[3].replace(/^"|"$/g,'').replace(/<br\s*\/?>/gi,'\n').replace(/&quot;/g,'"').replace(/`/g,'').trim()||m[1];const o=m[2];
+  if(o==='(['||o==='((')type=/\b(end|stop|finish|done|exit|complete|terminate)\b/i.test(text)?'end':'start';
+  else if(o==='{'||o==='{{')type='decision';else if(o==='[/'||o==='[\\')type='io'}
+ return{id:m[1],shape:!!m[2],type,text,len:m[0].length}}
+function pEdge(s){let m;
+ if(m=s.match(/^\s*-\.\s+(.*?)\s+\.-+>?\s*/))return{label:m[1],len:m[0].length};
+ if(m=s.match(/^\s*==\s+(.*?)\s+={2,}>?\s*/))return{label:m[1],len:m[0].length};
+ if(m=s.match(/^\s*--\s+([^>|]*?)\s+-{2,}>?\s*/))return{label:m[1],len:m[0].length};
+ if(m=s.match(/^\s*(?:-\.+-?>?|-{2,}>?|={2,}>?|~~~)\s*(?:\|([^|]*)\|)?\s*/))return{label:(m[1]||'').trim(),len:m[0].length};return null}
+function parseM(src){const info={},order=[],E=[];let dir='TB';
+ src=src.replace(/```(mermaid)?/gi,'').replace(/%%.*$/gm,'').replace(/:::\w+/g,'');
+ for(let l of src.split(/\n|;/)){l=l.trim();if(!l)continue;
+  let m=l.match(/^(?:flowchart|graph)\b\s*(\w+)?/i);if(m){dir=/^(LR|RL)$/i.test(m[1]||'')?'LR':'TB';continue}
+  if(/^(subgraph|end$|style|classDef|class\s|linkStyle|click|direction)/i.test(l))continue;
+  let rest=l,prev=null,pend=null;
+  while(rest.trim()){const r=pNode(rest);if(!r)break;
+   if(!info[r.id]){info[r.id]={type:'process',text:r.id};order.push(r.id)}
+   if(r.shape){info[r.id].type=r.type;info[r.id].text=r.text}
+   if(pend&&prev)E.push({from:prev,to:r.id,label:pend.label});
+   prev=r.id;rest=rest.slice(r.len);const er=pEdge(rest);if(!er)break;pend=er;rest=rest.slice(er.len)}}
+ const idm={},N=order.map(k=>{const n=mk(info[k].type,0,0,wrap(info[k].text));idm[k]=n.id;return n});
+ const edges=E.map(e=>({id:'e'+(++uid),from:idm[e.from],to:idm[e.to],label:e.label}));return{nodes:N,edges,dir}}
+function parseList(t){const steps=t.split('\n').map(s=>s.replace(/^\s*(\d+[\.\)]|[-*•])\s*/,'').trim()).filter(Boolean),N=[mk('start',0,0,'Start')];
+ steps.forEach(s=>{const d=/\?\s*$/.test(s)||/^if\b/i.test(s),io=/^(input|enter|read|get|ask|output|print|display|show)\b/i.test(s);N.push(mk(d?'decision':io?'io':'process',0,0,wrap(s)))});N.push(mk('end',0,0,'End'));
+ const E=[],ed=(a,b,l)=>E.push({id:'e'+(++uid),from:N[a].id,to:N[b].id,label:l||''});
+ for(let i=0;i<N.length-1;i++){const d=N[i].type==='decision';ed(i,i+1,d?'Yes':'');if(d&&i+2<N.length)ed(i,i+2,'No')}
+ return{nodes:N,edges:E,dir:'TB'}}
+const HELP={mermaid:'Ask Claude: “Write a Mermaid flowchart (flowchart TD) for …”, then paste the code here. Code fences are fine. Supported: start/end ([ ]), process [ ], decision { }, input/output [/ /], arrows with |labels|.',list:'Paste one step per line (numbers optional). Steps ending in “?” become Decisions (Yes goes to the next step, No skips one). Steps starting with Input/Enter/Print/Display become Input/Output shapes.'};
+function setMode(m){mode=m;$('#tm').classList.toggle('on',m==='mermaid');$('#tl').classList.toggle('on',m==='list');$('#mhelp').textContent=HELP[m]}
+function openImport(){setMode(mode);$('#modal').style.display='flex';$('#mm').focus()}
+function fillEx(){$('#mm').value=mode==='list'?EXL:EXM}
+function loadEx(){mode='mermaid';doImport()}
+function doImport(){let r;try{r=mode==='list'?parseList($('#mm').value):parseM($('#mm').value)}catch(x){return alert('Could not read that text: '+x.message)}
+ if(!r.nodes.length)return alert('No flowchart steps were found. Please check the text.');
+ S.dir=r.dir;S.nodes=r.nodes;S.edges=r.edges;layout(S.nodes,S.edges,S.dir);sel=selE=null;commit();$('#modal').style.display='none';syncUI();renderPanel();fitView()}
+/* ---------- files & export ---------- */
+function download(name,data,type){const a=document.createElement('a');a.href=URL.createObjectURL(data instanceof Blob?data:new Blob([data],{type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}
+function saveJSON(){download(fn('.json'),JSON.stringify({app:'flowchart-maker',version:1,...S},null,1),'application/json')}
+function openJSON(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.nodes)||!Array.isArray(d.edges))throw Error('not a flowchart project');
+ S={nodes:d.nodes,edges:d.edges,dir:d.dir==='LR'?'LR':'TB'};uid=maxId();sel=selE=null;commit();syncUI();renderPanel();fitView()}catch(x){alert('Could not open that file: '+x.message)}inp.value=''};r.readAsText(f)}
+function newDoc(){if(S.nodes.length&&!confirm('Clear everything in this chart? (You can Undo this.)'))return;S={nodes:[],edges:[],dir:S.dir};sel=selE=null;commit();renderPanel();render()}
+function svgString(p='x'){const b=bounds(),pad=30,W=b.w+2*pad,H=b.h+2*pad,X=b.x-pad,Y=b.y-pad;
+ return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="${X} ${Y} ${W} ${H}">${DEFS(p)}<rect x="${X}" y="${Y}" width="${W}" height="${H}" fill="#fff"/>${S.edges.map(e=>edgeSVG(e,false,p)).join('')}${S.nodes.map(nodeSVG).join('')}</svg>`}
+const need=()=>S.nodes.length?true:(alert('The diagram is empty. Add some shapes first.'),false);
+function expSVG(){if(need())download(fn('.svg'),svgString(),'image/svg+xml')}
+function expPNG(){if(!need())return;const b=bounds(),W=b.w+60,H=b.h+60,sc=Math.min(2,8000/Math.max(W,H)),img=new Image();
+ img.onload=()=>{const c=document.createElement('canvas');c.width=Math.round(W*sc);c.height=Math.round(H*sc);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);c.toBlob(bl=>download(fn('.png'),bl),'image/png')};
+ img.onerror=()=>alert('PNG export failed in this browser. Try Export SVG instead.');img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svgString())}
+function doPrint(){if(!need())return;$('#pa').innerHTML=svgString();window.print()}
+/* ---------- multiple charts ---------- */
+const lit=(id,type,x,y,w,h,text)=>({id,type,x,y,w,h,text,fill:DEF[type].fill,stroke:DEF[type].stroke,sw:2,dash:'',tc:'#111827',fs:14,b:0});
+const blank=()=>({nodes:[lit('n1','start',100,40,140,56,'Start')],edges:[],dir:'TB'});
+function seedAll(){const hl=blank();hl.nodes.push(lit('n2','process',40,170,260,70,'Edit website keywords\nfor SEO'));hl.edges.push({id:'e3',from:'n1',to:'n2',label:''});
+ return{cur:'home-loans-by-choice',del:[],projects:{'home-loans-by-choice':{name:'Home Loans by Choice',data:hl},'advanced-accounting':{name:'Advanced Accounting',data:blank()},'other-businesses':{name:'Other Businesses',data:blank()}}}}
+const fn=ext=>(P.projects[P.cur].name.replace(/[^\w]+/g,'-').replace(/^-|-$/g,'').toLowerCase()||'flowchart')+ext;
+function fillProj(){$('#proj').innerHTML=Object.keys(P.projects).map(k=>`<option value="${k}"${k===P.cur?' selected':''}>${esc(P.projects[k].name)}</option>`).join('')}
+function switchProj(id){P.cur=id;S=JSON.parse(JSON.stringify(P.projects[id].data));P.projects[id].data=S;sel=selE=null;connSrc=null;hist=[];hi=-1;uid=maxId();commit();fillProj();syncUI();renderPanel();fitView()}
+function addProj(){const n=prompt('Name for the new chart (e.g. a business name):');if(!n||!n.trim())return;let id=n.trim().replace(/[^\w]+/g,'-').replace(/^-|-$/g,'').toLowerCase()||'chart';while(P.projects[id])id+='-2';P.del=(P.del||[]).filter(x=>x!==id);P.projects[id]={name:n.trim(),data:blank()};switchProj(id)}
+function renameProj(){const n=prompt('New name for this chart:',P.projects[P.cur].name);if(!n||!n.trim())return;P.projects[P.cur].name=n.trim();commit();try{localStorage.setItem(KEY2,JSON.stringify(P))}catch(e){}fillProj()}
+function delProj(){const ks=Object.keys(P.projects);if(ks.length<2)return alert('You need at least one chart.');if(!confirm('Delete the chart "'+P.projects[P.cur].name+'" permanently? Save it first if you want a copy.'))return;(P.del=P.del||[]).push(P.cur);delete P.projects[P.cur];switchProj(Object.keys(P.projects)[0])}
+/* ---------- site: load & publish ---------- */
+const jf=async u=>{const r=await fetch(u+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw Error(r.status);return r.json()};
+async function loadSite(manual){if(manual&&!confirm('Replace the charts in this editor with the versions currently on the website? Unpublished edits will be lost.'))return;
+ try{const idx=await jf('charts/index.json'),np={cur:'',del:[],projects:{}};
+  for(const c of idx){try{const d=await jf('charts/'+c.file);np.projects[c.id]={name:c.name,data:{nodes:d.nodes,edges:d.edges,dir:d.dir==='LR'?'LR':'TB'}}}catch(e){}}
+  if(!Object.keys(np.projects).length)throw Error('no charts found');np.cur=Object.keys(np.projects)[0];P=np;switchProj(P.cur);if(manual)alert('Loaded the charts from the website.')}
+ catch(e){if(manual)alert('Could not load from the website ('+e.message+'). This only works when the editor is opened from your website address, not from a file on your computer.')}}
+const GH=()=>{try{return JSON.parse(localStorage.getItem('fc-gh')||'{}')}catch(e){return{}}};
+function ghSettings(){const g=GH(),o=prompt('GitHub username that owns the repository:',g.owner||'');if(o===null)return false;const r=prompt('Repository name:',g.repo||'');if(r===null)return false;const b=prompt('Branch (usually main):',g.branch||'main');if(b===null)return false;
+ const t=prompt('Paste your GitHub token. It is stored only in this browser.'+(g.token?' Leave blank to keep the saved one.':''),'');if(t===null)return false;
+ const n={owner:o.trim(),repo:r.trim(),branch:(b||'main').trim(),token:(t.trim()||g.token||'')};try{localStorage.setItem('fc-gh',JSON.stringify(n))}catch(e){alert('Could not save settings in this browser.');return false}return !!(n.owner&&n.repo&&n.token)}
+async function ghGet(g,path){const r=await fetch(`https://api.github.com/repos/${g.owner}/${g.repo}/contents/${path}?ref=${encodeURIComponent(g.branch)}&t=${Date.now()}`,{headers:{Authorization:'Bearer '+g.token,Accept:'application/vnd.github+json'},cache:'no-store'});
+ if(r.status===404)return null;if(!r.ok)throw Error('GitHub said '+r.status+(r.status===401?' (token not accepted)':r.status===403?' (token lacks permission)':''));const d=await r.json();return{sha:d.sha,text:decodeURIComponent(escape(atob(d.content.replace(/\n/g,''))))}}
+async function ghPut(g,path,text,msg,sha){const r=await fetch(`https://api.github.com/repos/${g.owner}/${g.repo}/contents/${path}`,{method:'PUT',headers:{Authorization:'Bearer '+g.token,Accept:'application/vnd.github+json','Content-Type':'application/json'},body:JSON.stringify({message:msg,content:btoa(unescape(encodeURIComponent(text))),branch:g.branch,...(sha?{sha}:{})})});
+ if(!r.ok){let m='';try{m=(await r.json()).message}catch(e){}throw Error('GitHub said '+r.status+': '+m)}}
+async function publish(){let g=GH();if(!(g.owner&&g.repo&&g.token)){alert('First, enter your GitHub details (one time only).');if(!ghSettings())return;g=GH()}
+ const id=P.cur,pr=P.projects[id];$('#st').textContent='Publishing…';
+ try{const old=await ghGet(g,'charts/'+id+'.json');await ghPut(g,'charts/'+id+'.json',JSON.stringify({name:pr.name,...pr.data},null,1),'Update chart: '+pr.name,old&&old.sha);
+  const mf=await ghGet(g,'charts/index.json');let man=[];try{man=JSON.parse(mf.text)}catch(e){}
+  const ent={id,name:pr.name,file:id+'.json'},i=man.findIndex(m=>m.id===id);if(i>=0)man[i]=ent;else man.push(ent);man=man.filter(m=>!(P.del||[]).includes(m.id));
+  await ghPut(g,'charts/index.json',JSON.stringify(man,null,1),'Update chart list',mf&&mf.sha);P.del=[];commit();try{localStorage.setItem(KEY2,JSON.stringify(P))}catch(e){}
+  $('#st').textContent='Published '+new Date().toLocaleTimeString();alert('Published "'+pr.name+'". The website shows the change in about a minute.')}
+ catch(e){$('#st').textContent='Publish failed';alert('Publish failed: '+e.message+'\nCheck Publish settings (username, repository, branch, token).')}}
+/* ---------- init ---------- */
+(function(){const ic={start:'<rect x="2" y="4" width="32" height="14" rx="7"',end:'<rect x="2" y="4" width="32" height="14" rx="7"',process:'<rect x="2" y="3" width="32" height="16" rx="3"',decision:'<polygon points="18,1 34,11 18,21 2,11"',io:'<polygon points="9,3 34,3 27,19 2,19"'};
+ $('#shapes').innerHTML=Object.keys(DEF).map(t=>`<button class="shp" draggable="true" ondragstart="event.dataTransfer.setData('text/plain','${t}')" onclick="addShape('${t}')"><svg width="36" height="22">${ic[t]} fill="${DEF[t].fill}" stroke="${DEF[t].stroke}" stroke-width="2"/></svg>${DEF[t].n}</button>`).join('');
+ try{const j=localStorage.getItem(KEY2);if(j)P=JSON.parse(j)}catch(e){}
+ let fresh=false;if(!P.cur||!P.projects||!P.projects[P.cur]){P=seedAll();fresh=true}
+ fillProj();S=JSON.parse(JSON.stringify(P.projects[P.cur].data));P.projects[P.cur].data=S;uid=maxId();
+ syncUI();commit();renderPanel();render();fitView();if(fresh)loadSite(false)})();
+</script></body></html>
