@@ -1,0 +1,46 @@
+{
+ "name": "Home Loans by Choice",
+ "nodes": [
+  {
+   "id": "n1",
+   "type": "start",
+   "x": 100,
+   "y": 40,
+   "w": 140,
+   "h": 56,
+   "text": "Start",
+   "fill": "#dcfce7",
+   "stroke": "#16a34a",
+   "sw": 2,
+   "dash": "",
+   "tc": "#111827",
+   "fs": 14,
+   "b": 0
+  },
+  {
+   "id": "n2",
+   "type": "process",
+   "x": 40,
+   "y": 170,
+   "w": 260,
+   "h": 70,
+   "text": "Edit website keywords\nfor SEO",
+   "fill": "#dbeafe",
+   "stroke": "#2563eb",
+   "sw": 2,
+   "dash": "",
+   "tc": "#111827",
+   "fs": 14,
+   "b": 0
+  }
+ ],
+ "edges": [
+  {
+   "id": "e3",
+   "from": "n1",
+   "to": "n2",
+   "label": ""
+  }
+ ],
+ "dir": "TB"
+}
